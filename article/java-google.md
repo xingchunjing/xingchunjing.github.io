@@ -35,7 +35,7 @@
     return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
 
 }</code></pre><p style="line-height: 2;"><span style="color: rgb(225, 60, 57); font-size: 14px; font-family: 华文楷体;">到了这一步，运行后显示java.lang.IllegalArgumentException</span></p><p style="line-height: 2;"><span style="color: rgb(225, 60, 57); font-size: 14px; font-family: 华文楷体;">报错是在</span></p><pre><code class="language-java">GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(jsonFactory, isr);</code></pre><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">查看源码才知道，</span><span style="color: rgb(29, 57, 196); font-size: 14px; font-family: 华文楷体;">load需要加载参数installed或者web</span></p><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">上面下载的json文件是服务端的凭证，之前使用下面的代码是没问题的，不过GoogleCredential已弃用，服务端的凭证与官方示例不匹配，需要下载</span><span style="color: rgb(225, 60, 57); font-size: 14px; font-family: 华文楷体;">OAuth 2.0 客户端 ID（凭证），一定要换</span></p><pre><code class="language-java">//这是之前的服务账号验证的方式，新的api中是被弃用的，但是官方文档中还是这么用的示例....，也许后续会更新吧
-public static GoogleCredential authorize1() throws GeneralSecurityException, IOException {
+public static GoogleCredential authorizeServer() throws GeneralSecurityException, IOException {
 
     HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
     JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
@@ -113,4 +113,170 @@ public class GooglePayServiceImpl implements GooglePayService {
     &lt;groupId&gt;com.google.api-client&lt;/groupId&gt;
     &lt;artifactId&gt;google-api-client&lt;/artifactId&gt;
     &lt;version&gt;1.28.0&lt;/version&gt;
-&lt;/dependency&gt;</code></pre><p style="line-height: 2;"><span style="color: rgb(66, 144, 247); font-size: 16px; font-family: 华文楷体;">三.查询订单信息</span></p>
+&lt;/dependency&gt;</code></pre><p style="line-height: 2;"><span style="color: rgb(66, 144, 247); font-size: 16px; font-family: 华文楷体;">三.查询订单信息</span></p><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">查询订单信息，上面的准备工作已经基本完成，可以直接完成代码了，伪代码如下：</span></p><pre><code class="language-java">public static void checkOrder() throws GeneralSecurityException, IOException {
+
+    // 参数详细说明:
+    String signtureData = "安卓上报的订单数据";
+    String signture = "安卓上报的签名";
+    String publicKey = "订单数据验签公钥";
+
+    JSONObject parseObject = JSON.parseObject(signtureData);
+    String productId = parseObject.getString("productId");//在谷歌后台定义的商品id
+    String packageName = parseObject.getString("packageName");//安卓apk包名
+    String purchaseToken = parseObject.getString("purchaseToken");//安卓上报的token
+    int purchaseState = parseObject.getIntValue("purchaseState");//订单状态
+
+    if (purchaseState != 0) {
+        //TODO 订单未完成付款
+        return;
+    }
+
+    Credential credential = authorizeServer();
+    HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
+
+    AndroidPublisher publisher = new AndroidPublisher.Builder(transport, JacksonFactory.getDefaultInstance(),
+            credential).setApplicationName("uu_oversea_pay").build();
+
+    AndroidPublisher.Purchases.Products products = publisher.purchases().products();
+    AndroidPublisher.Purchases.Subscriptions subscribes = publisher.purchases().subscriptions();
+
+    boolean doCheck = RSA.doCheck(signtureData, signture, publicKey, "RSA1", true);
+    // https://developers.google.com/android-publisher/api-ref/purchases/products/get
+    AndroidPublisher.Purchases.Products.Get product = products.get(packageName, productId, purchaseToken);
+    AndroidPublisher.Purchases.Subscriptions.Get subscribe = subscribes.get(packageName, productId,
+            purchaseToken);
+
+    // 获取订单信息
+    // https://developers.google.com/android-publisher/api-ref/purchases/products
+    // 通过consumptionState, purchaseState可以判断订单的状态
+    String purchaseOrderId = "";
+    int payType = 0;
+    if (0 == payType) {
+        ProductPurchase purchase = product.execute();
+        purchaseOrderId = purchase.getOrderId();
+        purchaseState = purchase.getPurchaseState();
+        if (purchaseState != 0) {
+            //TODO 订单未付款
+            return;
+        }
+    } else {
+        SubscriptionPurchase purchase = subscribe.execute();
+        Long expiryTimeMillis = purchase.getExpiryTimeMillis();
+        long now = System.currentTimeMillis() / 1000;
+        if (now &gt; expiryTimeMillis) {
+            //TODO 订单已过订阅期限
+            return;
+        }
+        purchaseOrderId = purchase.getOrderId();
+    }
+    //TODO 更改订单状态
+}</code></pre><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">返回的数据信息：</span></p><pre><code class="language-css">{
+
+	"purchaseTimeMillis": "1682575200000",//购买产品的时间，自纪元（1970 年 1 月 1 日）以来的毫秒数。
+	"purchaseState": 0,//订单的购买状态。可能的值为：0. 已购买 1. 已取消 2. 待定
+	"consumptionState": 0,//产品的消费状态。可能的值为： 0. 尚未消耗 1. 已消耗
+	"developerPayload": "",
+	"orderId": "GPA.3398-6726-1036-80298",//google订单号
+	"purchaseType": 0,
+	"acknowledgementState": 0,
+	"kind": "androidpublisher#productPurchase",
+	"obfuscatedExternalAccountId": "SDK2204180944530041",//上面客户支付时的透传字段，google指导是用来存放用户信息的，不能过长，否则客户端不能支付
+	"obfuscatedExternalProfileId": "",
+	"regionCode": "HK"
+}</code></pre><p style="line-height: 2;"><span style="color: rgb(66, 144, 247); font-size: 16px; font-family: 华文楷体;">四.退款数据查询</span></p><p style="line-height: 2;"><span style="color: rgb(66, 144, 247); font-size: 14px; font-family: 华文楷体;">退款信息需要自己去google查询，这一点不是很方便</span></p><pre><code class="language-java">public void googleRefundOrder() throws GeneralSecurityException, IOException {
+
+    GoogleCredential credential = authorizeServer();
+    String packageName = "安卓apk的包名";
+
+    HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
+    JacksonFactory defaultInstance = JacksonFactory.getDefaultInstance();
+
+    AndroidPublisher service = new AndroidPublisher.Builder(transport, defaultInstance, credential)
+            .setApplicationName("uu_oversea_pay").build();
+
+    // 获取google list对象
+    AndroidPublisher.Purchases.Voidedpurchases.List voidPurchaseList = service.purchases().voidedpurchases()
+            .list(packageName);
+    // 设置查询参数
+    voidPurchaseList.setStartTime(getDaysBeforeUnixTimeStampMinute(-24 * 60));//一天
+    // 执行查询
+    VoidedPurchasesListResponse response = voidPurchaseList.execute();
+    List&lt;VoidedPurchase&gt; voidedPurchases = response.getVoidedPurchases();
+    if (voidedPurchases == null) {
+        //TODO 没有退款
+        return;
+    }
+    // 获取分页tokenPagination
+    TokenPagination tokenPagination = response.getTokenPagination();
+    while (tokenPagination != null) {
+        // 设置查询token 重新执行查询 查询下一页
+        voidPurchaseList.setToken(tokenPagination.getNextPageToken());
+        VoidedPurchasesListResponse newResponse = voidPurchaseList.execute();
+        voidedPurchases.addAll(newResponse.getVoidedPurchases());
+        tokenPagination = newResponse.getTokenPagination();
+    }
+    for (VoidedPurchase voidedPurchase : voidedPurchases) {
+        String orderId = voidedPurchase.getOrderId();
+        //TODO 处理相关退款账号和设备
+    }
+}</code></pre><p style="line-height: 2;"><span style="color: rgb(66, 144, 247); font-size: 16px; font-family: 华文楷体;">四.订阅的订单</span></p><pre><code class="language-java">public void googleSubscribeOrder(byte[] body) throws IOException, GeneralSecurityException {
+    JSONObject paramJson = null;
+
+    String paramStr = new String(body, "utf-8");
+
+    if (StringUtils.isNotBlank(paramStr)) {
+        paramJson = JSON.parseObject(URLDecoder.decode(paramStr, "utf-8"));
+
+        JSONObject msgJson = paramJson.getJSONObject("message");
+        String data = msgJson.getString("data");
+        String developerNotificationStr = new String(Base64.getDecoder().decode(data), "UTF-8");
+        JSONObject developerNotificationJson = JSON.parseObject(developerNotificationStr);
+        String packageName = developerNotificationJson.getString("packageName");
+        JSONObject subscriptionNotificationJson = developerNotificationJson
+                .getJSONObject("subscriptionNotification");
+        String purchaseToken = subscriptionNotificationJson.getString("purchaseToken");
+        String subscriptionId = subscriptionNotificationJson.getString("subscriptionId");
+        /**
+         * notificationType int 通知的类型。它可以具有以下值： (1)
+         * SUBSCRIPTION_RECOVERED - 从帐号保留状态恢复了订阅。 (2)
+         * SUBSCRIPTION_RENEWED - 续订了处于活动状态的订阅。 (3)
+         * SUBSCRIPTION_CANCELED - 自愿或非自愿地取消了订阅。如果是自愿取消，在用户取消时发送。 (4)
+         * SUBSCRIP￼￼TION_PURCHASED - 购买了新的订阅。 (5) SUBSCRIPTION_ON_HOLD
+         * - 订阅已进入帐号保留状态（如已启用）。 (6) SUBSCRIPTION_IN_GRACE_PERIOD -
+         * 订阅已进入宽限期（如已启用）。 (7) SUBSCRIPTION_RESTARTED -
+         * 用户已通过“Play”&gt;“帐号”&gt;“订阅”重新激活其订阅（需要选择使用订阅恢复功能）。 (8)
+         * SUBSCRIPTION_PRICE_CHANGE_CONFIRMED - 用户已成功确认订阅价格变动。 (9)
+         * SUBSCRIPTION_DEFERRED - 订阅的续订时间点已延期。 (10) SUBSCRIPTION_PAUSED
+         * - 订阅已暂停。 (11) SUBSCRIPTION_PAUSE_SCHEDULE_CHANGED -
+         * 订阅暂停计划已更改。 (12) SUBSCRIPTION_REVOKED - 用户在有效时间结束前已撤消订阅。 (13)
+         * SUBSCRIPTION_EXPIRED - 订阅已过期。
+         */
+        int notificationType = subscriptionNotificationJson.getIntValue("notificationType");
+
+        if (2 == notificationType) {
+
+            GoogleCredential credential = authorizeServer();
+
+            HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
+
+            AndroidPublisher publisher = new AndroidPublisher.Builder(transport,
+                    JacksonFactory.getDefaultInstance(), credential).setApplicationName("uu_oversea_pay")
+                    .build();
+
+            AndroidPublisher.Purchases.Subscriptions subscribes = publisher.purchases().subscriptions();
+
+            AndroidPublisher.Purchases.Subscriptions.Get subscribe = subscribes.get(packageName, subscriptionId,
+                    purchaseToken);
+
+            SubscriptionPurchase purchase = subscribe.execute();
+            Long expiryTimeMillis = purchase.getExpiryTimeMillis();
+            long now = System.currentTimeMillis() / 1000;
+            if (now &gt; expiryTimeMillis) {
+                //已过订阅期限
+                return;
+            }
+            String purchaseOrderId = purchase.getOrderId();
+            //TODO 续订
+        }
+    }
+}</code></pre><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">google支付相关的问题就介绍到这...</span></p><p style="line-height: 2;"><span style="font-size: 14px; font-family: 华文楷体;">后记：我会在写一篇curl的流程介绍，那样不受api版本限制，比较自由灵活</span></p><p style="line-height: 2;"><br></p><ul><li style="text-align: start; line-height: 2;"><span style="font-size: 19px; font-family: 华文楷体;"><strong>本文作者：</strong></span><span style="font-size: 19px; font-family: 华文楷体;"> 景兴春</span></li><li style="text-align: start; line-height: 2;"><span style="font-size: 19px; font-family: 华文楷体;"><strong>本文链接：</strong></span><span style="font-size: 19px; font-family: 华文楷体;"> &nbsp;</span><a href="https://xingchunjing.github.io/#/content/java-google" target="_blank">https://xingchunjing.github.io/#/content/java-google</a></li><li style="text-align: start; line-height: 2;"><span style="font-size: 19px; font-family: 华文楷体;"><strong>版权声明：</strong></span><span style="font-size: 19px; font-family: 华文楷体;"> 本博客所有文章除特别声明外，均采用 </span><a href="https://www.apache.org/licenses/LICENSE-2.0.html" target="_blank"><span style="font-size: 19px; font-family: 华文楷体;">Apache License 2.0</span></a><span style="font-size: 19px; font-family: 华文楷体;"> 许可协议。转载请注明出处！</span></li></ul>

@@ -1,1 +1,0 @@
-import{_ as r,X as s,Y as a,Z as e,$ as t}from"./framework-a5b3b151.js";const c={},d=e("h1",{id:"redis缓存",tabindex:"-1"},[e("a",{class:"header-anchor",href:"#redis缓存","aria-hidden":"true"},"#"),t(" redis缓存")],-1),o=[d];function i(n,_){return s(),a("div",null,o)}const l=r(c,[["render",i],["__file","redis-cache.html.vue"]]);export{l as default};

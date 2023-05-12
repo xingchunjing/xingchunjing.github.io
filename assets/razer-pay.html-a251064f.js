@@ -1,1 +1,0 @@
-import{_ as r,X as a,Y as t,Z as e,$ as o}from"./framework-f01f539c.js";const c={},s=e("h1",{id:"razer-gold-支付",tabindex:"-1"},[e("a",{class:"header-anchor",href:"#razer-gold-支付","aria-hidden":"true"},"#"),o(" razer-gold 支付")],-1),d=[s];function n(_,l){return a(),t("div",null,d)}const h=r(c,[["render",n],["__file","razer-pay.html.vue"]]);export{h as default};

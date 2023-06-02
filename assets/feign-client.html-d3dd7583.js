@@ -1,0 +1,1 @@
+import{_ as t,X as a,Y as n,Z as e,$ as c}from"./framework-a5b3b151.js";const r={},s=e("h1",{id:"对外请求",tabindex:"-1"},[e("a",{class:"header-anchor",href:"#对外请求","aria-hidden":"true"},"#"),c(" 对外请求")],-1),o=[s];function _(i,d){return a(),n("div",null,o)}const f=t(r,[["render",_],["__file","feign-client.html.vue"]]);export{f as default};

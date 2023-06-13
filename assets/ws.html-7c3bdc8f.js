@@ -1,1 +1,0 @@
-import{_ as s,X as t,Y as a,Z as e,$ as c}from"./framework-a5b3b151.js";const r={},o=e("h1",{id:"ws长链接",tabindex:"-1"},[e("a",{class:"header-anchor",href:"#ws长链接","aria-hidden":"true"},"#"),c(" ws长链接")],-1),n=[o];function _(d,i){return t(),a("div",null,n)}const l=s(r,[["render",_],["__file","ws.html.vue"]]);export{l as default};
